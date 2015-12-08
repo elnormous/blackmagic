@@ -46,7 +46,6 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 #include <asm/page.h>
-#include <asm/i387.h>
 #include <asm/div64.h>
 #include <asm/atomic.h>
 #include <asm/cache.h>

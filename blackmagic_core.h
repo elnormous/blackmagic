@@ -91,6 +91,7 @@ struct blackmagic_device
 	unsigned int flags;					/* Device Capablities */
 	int id;                             /* Card ID */
 	atomic_t ready;						/* Card state */
+	atomic_t workCount;
 };
 
 #endif

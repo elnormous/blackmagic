@@ -49,15 +49,26 @@
 #include <linux/spinlock.h>
 #include <linux/jhash.h>
 #include <asm/page.h>
-#include <asm/i387.h>
 #include <asm/div64.h>
 #include <asm/atomic.h>
 #include <asm/cache.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)
-	#include <asm/fpu-internal.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
+	#include <asm/fpu/api.h>
+#else
+	#include <asm/i387.h>
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 4, 0)
+		#include <asm/fpu-internal.h>
+	#endif
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+	#include <asm/smap.h>
+#else
+	static inline void clac(void) { }
+	static inline void stac(void) { }
 #endif
 
 
@@ -219,7 +230,9 @@ inline void dl_spin_unlock_irqrestore(struct dl_spinlock_t *lock, unsigned long 
 
 inline void *dl_vmap(void *page_array, unsigned long page_num)
 {
-	return vmap((struct page **)page_array, page_num, VM_MAP, PAGE_SHARED);
+	void* mapping = vmap((struct page **)page_array, page_num, VM_MAP, PAGE_SHARED);
+	stac();
+	return mapping;
 }
 
 /*
@@ -229,6 +242,7 @@ inline void *dl_vmap(void *page_array, unsigned long page_num)
 inline void dl_vunmap(void *address)
 {
 	struct vmallocWorkEntry *work;
+	clac();
 	if (!in_interrupt())
 	{
 		vunmap(address);
@@ -777,7 +791,10 @@ dl_poll_wait(void *filp, struct dl_wait_queue_head_t *queue, void *wait, int wri
 inline void
 dl_kernel_fpu_begin()
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
+	preempt_disable();
+	__kernel_fpu_begin();
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 	kernel_fpu_begin();
 #else
 	struct thread_info *thread;
@@ -816,7 +833,10 @@ dl_kernel_fpu_begin()
 
 inline void dl_kernel_fpu_end(void)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
+	__kernel_fpu_end();
+	preempt_enable();
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
 	kernel_fpu_end();
 #else
 	stts();

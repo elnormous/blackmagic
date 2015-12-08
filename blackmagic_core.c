@@ -38,6 +38,7 @@
 #include <linux/fcntl.h>
 #include <linux/poll.h>
 #include <linux/version.h>
+#include <linux/sched.h>
 
 #include "blackmagic_core.h"
 
@@ -314,6 +315,7 @@ static void do_bh_work(void *data)
 	struct blackmagic_device *dev = (struct blackmagic_device*)data;
 #endif
 	dl_bh_work_handler(dev->driver);
+	atomic_dec(&dev->workCount);
 }
 
 static void blackmagic_tasklet_handler(unsigned long data)
@@ -323,7 +325,10 @@ static void blackmagic_tasklet_handler(unsigned long data)
 
 	status = dl_tasklet_handler(dev->driver);
 	if (status & DL_INTERRUPT_SCHED_WORK)
+	{
+		atomic_inc(&dev->workCount);
 		schedule_work(&dev->work);
+	}
 }
 
 static int blackmagic_alloc_id(void)
@@ -435,7 +440,8 @@ void
 blackmagic_destroy_device(struct blackmagic_device *ddev)
 {
 	// Stop bh handlers
-	flush_scheduled_work(); // Should really use cancel_work_sync, but it's GPL
+	while (atomic_read(&ddev->workCount))
+		schedule(); // Wait until all work is complete
 	tasklet_kill(&ddev->tasklet);
 
 	misc_deregister(&ddev->mdev);
@@ -651,7 +657,7 @@ static int __init pci_blackmagic_init(void)
 	if (ret)
 		return ret;
     
-    dl_info("Loading driver (version: 10.5a17)\n");
+    dl_info("Loading driver (version: 10.5.2a5)\n");
 	return pci_register_driver(&pci_driver);
 }
 
@@ -665,7 +671,7 @@ static void __exit pci_blackmagic_exit(void)
 
 MODULE_AUTHOR("Blackmagic Design Inc. <developer@blackmagicdesign.com>");
 MODULE_DESCRIPTION("Blackmagic Design blackmagic driver");
-MODULE_VERSION("10.5a17");
+MODULE_VERSION("10.5.2a5");
 MODULE_LICENSE("Proprietary");
 MODULE_DEVICE_TABLE(pci, blackmagic_ids);
 
